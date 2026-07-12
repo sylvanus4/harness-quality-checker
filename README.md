@@ -13,17 +13,16 @@ ESLint, but for agent harnesses. English / 한국어.
 - **Vendor-neutral.** Works for any harness — Claude Code, Codex, Gemini CLI, OpenHands, a custom loop, or an MCP tool definition.
 - **Transparent.** The rule set is `data/rules.json`; an independent Python audit re-derives every score and must reach byte-parity with the shipped JS in CI.
 
-## Load a skill without copy-paste
+## Load an agent definition without copy-paste
 
-Pasting is a hurdle, so there are three lower-friction inputs — all still 100% client-side:
+Pasting is a hurdle, so there are two lower-friction inputs — all still 100% client-side:
 
-- **Paste a GitHub URL.** A `raw.githubusercontent.com/…/SKILL.md` link, or a normal `github.com/…/blob/…` link (auto-converted to raw). GitHub raw is CORS-open, so the browser fetches the file directly.
-- **Drag & drop a file** (or browse). A local `SKILL.md` / agent `.md` / `.json` — read in the browser, nothing uploaded.
-- **Browse skills.sh.** A snapshot of popular Agent Skills (`data/skills.json`) resolved to their GitHub raw URLs; pick one and it's fetched + scored. (skills.sh sends no CORS header, so we snapshot it at build time via `tools/build_skills_catalog.cjs` instead of calling it live.)
+- **Paste a GitHub URL.** A `raw.githubusercontent.com/…` link, or a normal `github.com/…/blob/…` link (auto-converted to raw). GitHub raw is CORS-open, so the browser fetches the file directly.
+- **Drag & drop a file** (or browse). A local agent `.md` / system-prompt / `.json` — read in the browser, nothing uploaded.
 
 Every load runs a **pre-flight gate first** (`isCheckable`): it rejects HTML error pages, binaries, and too-short files with a clear reason, then extracts the prompt (whole markdown) and any fenced JSON tool schema before scoring.
 
-> **Category caveat:** HQC scores *agent-harness structure*. Most skills on skills.sh are **knowledge / workflow skills** (checklists, style guides, how-tos) and will legitimately score low — that's a category mismatch, not a defect. Score a skill only if it's meant to drive an autonomous agent loop. The UI shows this notice whenever you load a file.
+> **Checking a *skill* (SKILL.md), not a harness?** HQC scores *agent-harness structure* — a knowledge/workflow skill legitimately scores low here (category mismatch, not a defect). For SKILL.md authoring quality use the sibling tool [skill-quality-checker](https://sylvanus4.github.io/skill-quality-checker/).
 
 ## Generate a hardened prompt
 

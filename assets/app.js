@@ -2,7 +2,7 @@
    harness-quality-checker — DOM wiring (EN/KO) + source loaders.
    Scoring, generation, URL-normalization, checkable-gate, and markdown
    extraction all live in compute.js (pure). This file fetches the rule set +
-   skill catalog, wires the textareas / URL / drag-drop / skills.sh picker,
+   wires the textareas / URL / drag-drop loaders,
    runs the pre-flight gate before scoring, and renders in the selected
    language. User-supplied strings are escaped before insertion.
    ───────────────────────────────────────────────────────────────────────── */
@@ -11,16 +11,17 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   const promptEl = $("prompt"), toolsEl = $("tools"), out = $("out"), badge = $("gradeBadge"), genOut = $("genOut");
-  const srcUrl = $("srcUrl"), skillSelect = $("skillSelect"), dropZone = $("dropZone"), fileInput = $("fileInput"),
+  const srcUrl = $("srcUrl"), dropZone = $("dropZone"), fileInput = $("fileInput"),
     loadStatus = $("loadStatus"), disclaimer = $("disclaimer");
-  let rules = null, examples = null, skills = null, lang = "ko";
+  let rules = null, examples = null, lang = "ko";
   const mode = () => (document.querySelector('input[name="genmode"]:checked') || {}).value || "gaps";
 
   const I18N = {
     en: {
-      sub: 'Paste your agent\'s <b>system prompt</b> and <b>tool schema</b> — or <b>load a SKILL.md by URL / file / from skills.sh</b>. A rule-based static analyzer scores the harness on five axes — <b>Loop · Verification · Tracing · Memory · Safety</b> — flags the gaps, and can <b>generate a hardened prompt</b> that satisfies all five. Like ESLint, but for agent harnesses. <b>No key · no server · no data leaves your browser.</b>',
-      inHead: "Input", loadFrom: "Load from a URL, file, or skills.sh", fetch: "Fetch", check: "Check",
-      dropText: "Drop a SKILL.md / agent .md here, or ", browse: "browse", skillPlaceholder: "Browse popular skills (skills.sh)…",
+      sub: 'Paste your agent\'s <b>system prompt</b> and <b>tool schema</b> — or <b>load an agent definition by URL or file</b>. A rule-based static analyzer scores the harness on five axes — <b>Loop · Verification · Tracing · Memory · Safety</b> — flags the gaps, and can <b>generate a hardened prompt</b> that satisfies all five. Like ESLint, but for agent harnesses. <b>No key · no server · no data leaves your browser.</b>',
+      inHead: "Input", loadFrom: "Load from a URL or file", fetch: "Fetch", check: "Check",
+      dropText: "Drop a SKILL.md / agent .md here, or ", browse: "browse",
+      skillXlink: 'Checking a <b>skill</b> (SKILL.md), not a harness? → <a href="https://sylvanus4.github.io/skill-quality-checker/">skill-quality-checker</a>',
       lblPrompt: "System prompt", hintPrompt: "the agent / MCP tool instructions",
       lblTools: "Tool / function schema", hintTools: "JSON — Anthropic or OpenAI shape (optional)",
       exStrong: "Our system (reference)", exWeak: "Load weak example", clear: "Clear",
@@ -36,14 +37,15 @@
       howAxesSummary: "What the five axes mean",
       howAxesBody: "<ul><li><b>Loop</b> — does the harness form a real agent loop? Tool results fed back as observations, iteration, and an explicit exit condition — not a single-shot answer.</li><li><b>Verification</b> — does the loop close on an objective gate (tests / typecheck / exit code / an independent reviewer) rather than the model's own claim that it is done?</li><li><b>Tracing</b> — are inputs, outputs, timing, and errors recorded per step, so a failure can be diagnosed after the fact?</li><li><b>Memory</b> — are short-term working memory, conversation history, and a long-term store distinguished, and is the context budget managed?</li><li><b>Safety</b> — is untrusted input validated, are tool permissions scoped, and are irreversible actions gated on approval / dry-run / rollback?</li></ul><p class='dim'>Adapted from the common \"production agent stack\" framing (loop · harness · evals · tracing · memory), reframed for what you can statically check in a prompt + tool schema.</p>",
       howScoreSummary: "How the score works (and its limits)",
-      howScoreBody: "<ul><li>Each axis has weighted <b>signals</b> (regex phrase patterns + structural checks on the tool JSON). A signal counts if its phrasing appears in your prompt/tools <em>or</em> its structural check passes.</li><li>Axis score = <code>min(20, sum of matched signal weights)</code>. Total = sum of the five axes = <code>0–100</code>, mapped to a letter grade.</li><li>The <b>Generate</b> button assembles a hardened prompt deterministically from the same rules — each clause contains the phrasing the analyzer looks for, so the result re-scores near-100. It is a scaffold to edit, not a finished prompt.</li><li>Loading a URL/file fetches only the raw text (GitHub raw is CORS-open); skills.sh is snapshotted into <code>data/skills.json</code> because it sends no CORS header. Everything is analyzed locally.</li><li><b>Limits:</b> this is a <em>lint</em>, not a proof. It reads phrasing and structure, so it can miss an idea worded unusually, or credit a phrase that isn't truly wired. A low score means \"make these concerns explicit,\" not \"this is bad.\"</li></ul>",
+      howScoreBody: "<ul><li>Each axis has weighted <b>signals</b> (regex phrase patterns + structural checks on the tool JSON). A signal counts if its phrasing appears in your prompt/tools <em>or</em> its structural check passes.</li><li>Axis score = <code>min(20, sum of matched signal weights)</code>. Total = sum of the five axes = <code>0–100</code>, mapped to a letter grade.</li><li>The <b>Generate</b> button assembles a hardened prompt deterministically from the same rules — each clause contains the phrasing the analyzer looks for, so the result re-scores near-100. It is a scaffold to edit, not a finished prompt.</li><li>Loading a URL/file fetches only the raw text (GitHub raw is CORS-open); everything is analyzed locally in your browser.</li><li><b>Limits:</b> this is a <em>lint</em>, not a proof. It reads phrasing and structure, so it can miss an idea worded unusually, or credit a phrase that isn't truly wired. A low score means \"make these concerns explicit,\" not \"this is bad.\"</li></ul>",
       footer: '100% client-side · <a href="https://github.com/sylvanus4/harness-quality-checker">GitHub</a> · MIT · a vendor-neutral self-diagnostic. Scores are heuristic estimates, not a guarantee.',
       loadErr: (m) => 'Could not load rule set (' + esc(m) + "). Serve over http (e.g. <code>python3 -m http.server</code>), not file://."
     },
     ko: {
-      sub: '에이전트의 <b>시스템 프롬프트</b>와 <b>툴 스키마</b>를 붙여넣거나 — <b>URL·파일·skills.sh에서 SKILL.md를 불러오세요</b>. 규칙 기반 정적 분석기가 하네스를 5축 — <b>루프 · 검증 · 추적 · 메모리 · 안전</b> — 으로 채점하고, 빈틈을 짚고, 다섯 축을 만족하는 <b>강화된 프롬프트를 생성</b>합니다. ESLint의 에이전트 하네스판. <b>키 없음 · 서버 없음 · 데이터가 브라우저를 벗어나지 않음.</b>',
-      inHead: "입력", loadFrom: "URL·파일·skills.sh에서 불러오기", fetch: "가져오기", check: "검사",
-      dropText: "SKILL.md / 에이전트 .md 파일을 여기에 놓거나, ", browse: "찾아보기", skillPlaceholder: "인기 스킬 둘러보기 (skills.sh)…",
+      sub: '에이전트의 <b>시스템 프롬프트</b>와 <b>툴 스키마</b>를 붙여넣거나 — <b>URL이나 파일로 에이전트 정의를 불러오세요</b>. 규칙 기반 정적 분석기가 하네스를 5축 — <b>루프 · 검증 · 추적 · 메모리 · 안전</b> — 으로 채점하고, 빈틈을 짚고, 다섯 축을 만족하는 <b>강화된 프롬프트를 생성</b>합니다. ESLint의 에이전트 하네스판. <b>키 없음 · 서버 없음 · 데이터가 브라우저를 벗어나지 않음.</b>',
+      inHead: "입력", loadFrom: "URL·파일에서 불러오기", fetch: "가져오기", check: "검사",
+      dropText: "SKILL.md / 에이전트 .md 파일을 여기에 놓거나, ", browse: "찾아보기",
+      skillXlink: '하네스가 아니라 <b>스킬</b>(SKILL.md)을 검사하나요? → <a href="https://sylvanus4.github.io/skill-quality-checker/">skill-quality-checker</a>',
       lblPrompt: "시스템 프롬프트", hintPrompt: "에이전트 / MCP 툴 지시문",
       lblTools: "툴 / 함수 스키마", hintTools: "JSON — Anthropic 또는 OpenAI 형태 (선택)",
       exStrong: "우리 시스템 (참고)", exWeak: "약한 예시 불러오기", clear: "지우기",
@@ -59,7 +61,7 @@
       howAxesSummary: "다섯 축의 의미",
       howAxesBody: "<ul><li><b>루프(Loop)</b> — 실제 에이전트 루프를 이루는가? 툴 결과를 관찰로 되먹이고, 반복하며, 명시적 종료 조건이 있는가 — 한 번에 답하고 끝이 아니라.</li><li><b>검증(Verification)</b> — 모델의 '끝났다' 주장이 아니라 객관적 게이트(테스트/타입체크/exit code/독립 리뷰어)로 루프를 닫는가?</li><li><b>추적(Tracing)</b> — 단계별 입력·출력·타이밍·에러가 기록돼 사후에 실패를 진단할 수 있는가?</li><li><b>메모리(Memory)</b> — 단기 작업 메모리·대화 히스토리·장기 저장소를 구분하고, 컨텍스트 예산을 관리하는가?</li><li><b>안전(Safety)</b> — 신뢰 불가 입력을 검증하고, 툴 권한을 좁히며, 비가역 행동을 승인/dry-run/rollback으로 막는가?</li></ul><p class='dim'>흔한 \"프로덕션 에이전트 스택\" 프레임(loop · harness · evals · tracing · memory)을, 프롬프트+툴 스키마에서 정적으로 확인 가능한 형태로 재구성한 것입니다.</p>",
       howScoreSummary: "채점 방식 (그리고 한계)",
-      howScoreBody: "<ul><li>각 축은 가중 <b>신호</b>(정규식 문구 패턴 + 툴 JSON 구조 검사)를 가집니다. 해당 문구가 프롬프트/툴에 나타나거나 구조 검사를 통과하면 카운트됩니다.</li><li>축 점수 = <code>min(20, 매칭된 신호 가중치 합)</code>. 총점 = 5축 합 = <code>0–100</code>, 등급으로 매핑.</li><li><b>생성</b> 버튼은 같은 규칙으로 강화 프롬프트를 결정론적으로 조립합니다 — 각 조항이 분석기가 찾는 문구를 담고 있어 결과가 100점 근처로 재채점됩니다. 완성본이 아니라 다듬을 골격입니다.</li><li>URL/파일 불러오기는 원문 텍스트만 가져옵니다(GitHub raw는 CORS 열림). skills.sh는 CORS 헤더를 안 줘서 <code>data/skills.json</code>에 스냅샷했습니다. 분석은 전부 로컬에서 이뤄집니다.</li><li><b>한계:</b> 이것은 <em>린트</em>이지 증명이 아닙니다. 문구·구조를 읽으므로 특이 표현을 놓치거나 실제 배선 안 된 문구에 점수를 줄 수 있습니다. 낮은 점수는 \"이 관심사를 명시하라\"는 뜻이지 \"나쁘다\"가 아닙니다.</li></ul>",
+      howScoreBody: "<ul><li>각 축은 가중 <b>신호</b>(정규식 문구 패턴 + 툴 JSON 구조 검사)를 가집니다. 해당 문구가 프롬프트/툴에 나타나거나 구조 검사를 통과하면 카운트됩니다.</li><li>축 점수 = <code>min(20, 매칭된 신호 가중치 합)</code>. 총점 = 5축 합 = <code>0–100</code>, 등급으로 매핑.</li><li><b>생성</b> 버튼은 같은 규칙으로 강화 프롬프트를 결정론적으로 조립합니다 — 각 조항이 분석기가 찾는 문구를 담고 있어 결과가 100점 근처로 재채점됩니다. 완성본이 아니라 다듬을 골격입니다.</li><li>URL/파일 불러오기는 원문 텍스트만 가져옵니다(GitHub raw는 CORS 열림). 분석은 전부 브라우저 로컬에서 이뤄집니다.</li><li><b>한계:</b> 이것은 <em>린트</em>이지 증명이 아닙니다. 문구·구조를 읽으므로 특이 표현을 놓치거나 실제 배선 안 된 문구에 점수를 줄 수 있습니다. 낮은 점수는 \"이 관심사를 명시하라\"는 뜻이지 \"나쁘다\"가 아닙니다.</li></ul>",
       footer: '100% 클라이언트 사이드 · <a href="https://github.com/sylvanus4/harness-quality-checker">GitHub</a> · MIT · 벤더 중립 자가진단 도구. 점수는 휴리스틱 추정치이며 보장이 아닙니다.',
       loadErr: (m) => '규칙셋을 불러오지 못했습니다 (' + esc(m) + "). file:// 이 아니라 http로 서빙하세요 (예: <code>python3 -m http.server</code>)."
     }
@@ -72,10 +74,9 @@
     $("inHead").firstChild.nodeValue = t.inHead + " ";
     $("loadFromLbl").textContent = t.loadFrom;
     $("btnFetch").textContent = t.fetch;
-    $("btnCheckSkill").textContent = t.check;
     $("dropText").textContent = t.dropText;
     $("browseLbl").textContent = t.browse;
-    if (skillSelect.options[0]) skillSelect.options[0].textContent = t.skillPlaceholder;
+    $("skillXlink").innerHTML = t.skillXlink;
     $("lblPrompt").childNodes[0].nodeValue = t.lblPrompt + " ";
     $("hintPrompt").textContent = t.hintPrompt;
     $("lblTools").childNodes[0].nodeValue = t.lblTools + " ";
@@ -195,19 +196,6 @@
     promptEl.value = c.prompt; toolsEl.value = c.tool; showDisclaimer(false); setStatus("", ""); render();
   }
 
-  function populateSkills() {
-    if (!skills || !skills.skills) return;
-    const ph = document.createElement("option"); ph.value = ""; ph.textContent = I18N[lang].skillPlaceholder;
-    skillSelect.appendChild(ph);
-    skills.skills.forEach(function (s) {
-      const o = document.createElement("option");
-      o.value = s.rawUrl;
-      const k = s.installs >= 1000 ? Math.round(s.installs / 1000) + "k" : String(s.installs);
-      o.textContent = s.name + " · " + s.source + " · " + k;
-      skillSelect.appendChild(o);
-    });
-  }
-
   // events
   promptEl.addEventListener("input", function () { showDisclaimer(false); render(); });
   toolsEl.addEventListener("input", render);
@@ -215,8 +203,6 @@
   $("btnCopy").addEventListener("click", copyGen);
   $("btnFetch").addEventListener("click", fetchFromInput);
   srcUrl.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); fetchFromInput(); } });
-  $("btnCheckSkill").addEventListener("click", function () { if (skillSelect.value) fetchAndLoad(skillSelect.value); });
-  skillSelect.addEventListener("change", function () { if (skillSelect.value) fetchAndLoad(skillSelect.value); });
   fileInput.addEventListener("change", function () {
     const f = fileInput.files && fileInput.files[0]; if (!f) return;
     const rd = new FileReader(); rd.onload = function () { ingestText(String(rd.result), f.name); }; rd.readAsText(f);
@@ -238,8 +224,7 @@
   applyChrome();
   Promise.all([
     fetch("data/rules.json").then(function (r) { return r.json(); }),
-    fetch("data/examples.json").then(function (r) { return r.json(); }),
-    fetch("data/skills.json").then(function (r) { return r.json(); }).catch(function () { return { skills: [] }; })
-  ]).then(function (res) { rules = res[0]; examples = res[1]; skills = res[2]; populateSkills(); render(); })
+    fetch("data/examples.json").then(function (r) { return r.json(); })
+  ]).then(function (res) { rules = res[0]; examples = res[1]; render(); })
     .catch(function (e) { out.innerHTML = '<div class="err">' + I18N[lang].loadErr(e && e.message) + "</div>"; });
 })();

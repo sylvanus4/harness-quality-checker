@@ -29,13 +29,10 @@
         <input type="text" id="srcUrl" placeholder="raw.githubusercontent.com/…/SKILL.md  or a github.com …/blob/… URL">
         <button class="btn" id="btnFetch" type="button">Fetch</button>
       </div>
-      <div class="loader-row">
-        <select id="skillSelect" aria-label="Popular skills"></select>
-        <button class="btn" id="btnCheckSkill" type="button">Check</button>
-      </div>
       <div class="dropzone" id="dropZone"><span id="dropText">Drop a SKILL.md / agent .md here, or </span><label class="link" for="fileInput" id="browseLbl">browse</label></div>
       <input type="file" id="fileInput" accept=".md,.markdown,.mdx,.txt,.json" hidden>
       <div class="load-status" id="loadStatus" role="status"></div>
+      <div class="load-xlink" id="skillXlink"></div>
       <div class="disclaimer" id="disclaimer" hidden></div>
     </div>
 
