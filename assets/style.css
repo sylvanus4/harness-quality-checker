@@ -96,3 +96,21 @@ details.axis-sigs > summary::-webkit-details-marker { display: none; }
 .schema-row.issue .mk { color: var(--no); }
 .schema-row.ok .mk { color: var(--ok); }
 .schema-row.issue { color: var(--dim); }
+
+/* ── topbar + segmented controls + generator ── */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.segmented { display: inline-flex; gap: 4px; }
+.segmented label { margin: 0; padding: 6px 12px; background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer; font-size: 12.5px; display: inline-flex; align-items: center; gap: 5px; min-height: 34px; }
+.segmented input { accent-color: var(--accent); margin: 0; }
+.segmented label:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); }
+.lang label { padding: 5px 10px; min-height: 30px; }
+
+.generator { margin-top: 8px; }
+.generator .panel { padding: 18px; }
+.gen-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.gen-head h2 { margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
+#genSub { margin: 0 0 12px; max-width: 80ch; }
+#genOut { width: 100%; margin-top: 12px; background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; resize: vertical; }
+button.btn[disabled] { opacity: 0.5; cursor: not-allowed; }

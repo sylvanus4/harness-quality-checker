@@ -48,8 +48,13 @@ ok("undefined input safe (no throw)", analyze(undefined, undefined, rules).total
 let allGapsPresent = true;
 for (const a of run(C("partial")).axes)
   for (const s of a.signals)
-    if (!s.matched && !(typeof s.gap === "string" && s.gap.length > 0)) allGapsPresent = false;
-ok("unmatched signals carry an actionable gap", allGapsPresent);
+    if (!s.matched && !(s.gap && typeof s.gap.en === "string" && s.gap.en.length > 0)) allGapsPresent = false;
+ok("unmatched signals carry an actionable gap (bilingual)", allGapsPresent);
+
+// 5b. Bilingual: axis names / grade blurb / signal copy exist in EN and KO
+const axKo = strong.axes.every((a) => a.name.en && a.name.ko && a.summary.en && a.summary.ko);
+ok("axes carry EN+KO names & summaries", axKo);
+ok("grade blurb bilingual", !!(strong.grade.blurb.en && strong.grade.blurb.ko));
 
 // 6. Tool-schema structural analysis: valid tool parses, invalid flags an issue
 ok("strong tool parses", strong.toolSchema.parsed === true && strong.toolSchema.count === 1);
@@ -59,6 +64,26 @@ ok("invalid tool -> parsed false + issue reported", badTool.toolSchema.parsed ==
 // 7. A described, typed tool schema yields an `ok` note; a bare one yields issues
 const missingDesc = analyze("agent", "[{\"name\":\"foo\"}]", rules);
 ok("tool without description -> issue", missingDesc.toolSchema.issues.some((i) => /no description/.test(i)));
+
+// 8. Prompt generator — the core property: a generated prompt satisfies the axes.
+const { harden } = require("../assets/compute.js");
+const weak = C("weak");
+const genAllTool = harden(weak.prompt, C("strong").tool, rules, { mode: "all", lang: "en" });
+const genAllNoTool = harden(weak.prompt, "", rules, { mode: "all", lang: "en" });
+ok("harden(all)+tool re-scores A (>=85)", HarnessCheckReanalyze(genAllTool, C("strong").tool) >= 85);
+ok("harden(all) reaches 100 with a tool", HarnessCheckReanalyze(genAllTool, C("strong").tool) === 100);
+ok("harden(all) prose-only still >=85 (A)", HarnessCheckReanalyze(genAllNoTool, "") >= 85);
+ok("generated prompt keeps the user's intent", genAllTool.indexOf(weak.prompt.trim().slice(0, 20)) !== -1);
+
+const genGaps = harden(weak.prompt, "", rules, { mode: "gaps", lang: "en" });
+ok("gaps mode raises a weak harness's score", HarnessCheckReanalyze(genGaps, "") > run(weak).total);
+ok("gaps mode notes the missing tool schema", /tool schema/i.test(genGaps));
+
+const genKo = harden(weak.prompt, "", rules, { mode: "all", lang: "ko" });
+ok("KO generator emits Korean contract header", genKo.indexOf("운영 계약") !== -1);
+ok("generator deterministic", harden(weak.prompt, "", rules, { mode: "all", lang: "en" }) === genAllNoTool);
+
+function HarnessCheckReanalyze(promptStr, toolStr) { return analyze(promptStr, toolStr, rules).total; }
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

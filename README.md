@@ -2,14 +2,26 @@
 
 **Is your agent harness actually good?** Paste your agent (or MCP tool) **system
 prompt** and **tool schema**; a free, 100% client-side static analyzer scores it
-on five axes — **Loop · Verification · Tracing · Memory · Safety** — and shows the
-exact gaps to fix before you deploy. Like ESLint, but for agent harnesses.
+on five axes — **Loop · Verification · Tracing · Memory · Safety** — shows the
+exact gaps, and **generates a hardened prompt that satisfies all five**. Like
+ESLint, but for agent harnesses. English / 한국어.
 
 **Live:** https://sylvanus4.github.io/harness-quality-checker/
 
-- **No key, no login, no server, no data egress.** Everything runs in your browser.
+- **No key, no login, no server, no data egress.** Everything runs in your browser — including the prompt generator (deterministic assembly, no model call).
+- **Bilingual.** EN/KO toggle for the whole UI, the axis explanations, and the generated prompt.
 - **Vendor-neutral.** Works for any harness — Claude Code, Codex, Gemini CLI, OpenHands, a custom loop, or an MCP tool definition.
 - **Transparent.** The rule set is `data/rules.json`; an independent Python audit re-derives every score and must reach byte-parity with the shipped JS in CI.
+
+## Generate a hardened prompt
+
+Give it a rough prompt and it returns a full one. The **Generate** button keeps
+your text as the *Intent* and appends a deterministic **operating contract** —
+for each axis, the canonical clause(s) you're missing (or all of them). Each
+clause is written to contain the phrasing the analyzer looks for, so the
+generated prompt **re-scores near-100** (a unit test asserts this property).
+It's a scaffold to edit and merge with your intent, not a finished prompt, and
+it never calls a model.
 
 ## The five axes
 

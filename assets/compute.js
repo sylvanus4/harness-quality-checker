@@ -115,7 +115,7 @@
         const matched = signalMatched(sig, combined, facts);
         if (matched) raw += sig.weight;
         return { id: sig.id, weight: sig.weight, matched: matched,
-          present: sig.present, gap: sig.gap };
+          present: sig.present, gap: sig.gap, clause: sig.clause, schema: sig.schema };
       });
       const score = Math.min(axis.max, raw);
       total += score; maxTotal += axis.max;
@@ -134,7 +134,48 @@
     };
   }
 
-  const api = { analyze: analyze, toolFacts: toolFacts };
+  // ── Prompt generator ──────────────────────────────────────────────────
+  // Deterministically assembles a harness-grade system prompt from the user's
+  // rough prompt (kept as the Intent) + the canonical clause for each signal.
+  // mode "gaps": only add clauses for UNMATCHED signals; mode "all": every axis.
+  // No model call — pure string assembly, so it stays 100% client-side. By
+  // construction each clause contains the phrase the analyzer looks for, so the
+  // generated prompt re-scores high (see the property test).
+  const GEN = {
+    en: { intentHeader: "# Intent", intentPlaceholder: "<describe what the agent should accomplish>",
+          contractHeader: "## Operating contract", gapsNote: "Filling the gaps found in your harness:",
+          allNote: "A full five-axis operating contract:", toolNote: "(also define the tool schema so the agent can act)" },
+    ko: { intentHeader: "# 의도 (Intent)", intentPlaceholder: "<에이전트가 달성할 목표를 여기에 기술>",
+          contractHeader: "## 운영 계약 (Operating contract)", gapsNote: "하네스에서 발견된 빈틈을 채웁니다:",
+          allNote: "5축 전체 운영 계약:", toolNote: "(에이전트가 행동하도록 툴 스키마도 정의하세요)" }
+  };
+
+  function harden(promptText, toolText, rules, opts) {
+    opts = opts || {};
+    const lang = GEN[opts.lang] ? opts.lang : "en";
+    const mode = opts.mode === "all" ? "all" : "gaps";
+    const a = analyze(promptText, toolText, rules);
+    const g = GEN[lang];
+    const intent = norm(promptText).trim();
+    const lines = [g.intentHeader, intent || g.intentPlaceholder, "", g.contractHeader,
+      "_" + (mode === "all" ? g.allNote : g.gapsNote) + "_"];
+    let n = 0, needsTool = false;
+    a.axes.forEach(function (axis) {
+      const chosen = axis.signals.filter(function (s) { return mode === "all" ? true : !s.matched; });
+      if (chosen.length === 0) return;
+      n++;
+      lines.push("", "### " + n + ". " + axis.name[lang]);
+      chosen.forEach(function (s) {
+        if (s.schema && !s.matched) needsTool = true;
+        lines.push("- " + (s.clause ? s.clause[lang] : ""));
+      });
+    });
+    if (needsTool) lines.push("", "> " + g.toolNote);
+    return lines.join("\n");
+  }
+
+  const api = { analyze: analyze, toolFacts: toolFacts, harden: harden };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.HarnessCheck = api;
+  // eslint note: `api` intentionally exposes analyze/harden/toolFacts only.
 })(typeof self !== "undefined" ? self : this);

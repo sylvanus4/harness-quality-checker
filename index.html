@@ -4,62 +4,74 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Harness Quality Checker · is your agent harness actually good?</title>
-<meta name="description" content="Paste your agent's system prompt and tool schema. A free, client-side static analyzer scores it on five axes — Loop, Verification, Tracing, Memory, Safety — and shows exactly which gaps to fix before you deploy. No key, no login, no data egress.">
+<meta name="description" content="Paste your agent's system prompt and tool schema. A free, client-side static analyzer scores it on five axes — Loop, Verification, Tracing, Memory, Safety — shows the gaps, and generates a hardened prompt that satisfies all five. EN/KO. No key, no login, no data egress.">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header>
-  <h1>Harness Quality Checker</h1>
-  <p class="sub">Paste your agent's <b>system prompt</b> and <b>tool schema</b>. A rule-based static analyzer scores the harness on five axes — <b>Loop · Verification · Tracing · Memory · Safety</b> — and flags the exact gaps to fix before you ship. Like ESLint, but for agent harnesses. <b>No key · no server · no data leaves your browser.</b></p>
+  <div class="topbar">
+    <h1>Harness Quality Checker</h1>
+    <div class="segmented lang" id="langToggle" role="group" aria-label="Language">
+      <label><input type="radio" name="lang" value="en" checked> EN</label>
+      <label><input type="radio" name="lang" value="ko"> 한국어</label>
+    </div>
+  </div>
+  <p class="sub" id="sub">Paste your agent's <b>system prompt</b> and <b>tool schema</b>. A rule-based static analyzer scores the harness on five axes — <b>Loop · Verification · Tracing · Memory · Safety</b> — flags the exact gaps, and can <b>generate a hardened prompt</b> that satisfies all five. Like ESLint, but for agent harnesses. <b>No key · no server · no data leaves your browser.</b></p>
 </header>
 
 <main id="app">
   <section class="panel inputs">
-    <h2>Input</h2>
-    <label>System prompt <span class="hint">the agent / MCP tool instructions</span>
-      <textarea id="prompt" rows="12" placeholder="You are an autonomous agent that…"></textarea>
+    <h2 id="inHead">Input</h2>
+    <label id="lblPrompt">System prompt <span class="hint" id="hintPrompt">the agent / MCP tool instructions</span>
+      <textarea id="prompt" rows="11" placeholder="You are an autonomous agent that…"></textarea>
     </label>
-    <label>Tool / function schema <span class="hint">JSON — Anthropic or OpenAI shape (optional)</span>
-      <textarea id="tools" rows="8" placeholder='[{"name":"run_tests","description":"…","input_schema":{"type":"object","properties":{}}}]'></textarea>
+    <label id="lblTools">Tool / function schema <span class="hint" id="hintTools">JSON — Anthropic or OpenAI shape (optional)</span>
+      <textarea id="tools" rows="7" placeholder='[{"name":"run_tests","description":"…","input_schema":{"type":"object","properties":{}}}]'></textarea>
     </label>
     <div class="row">
-      <button class="btn" data-ex="strong" type="button">Load strong example</button>
-      <button class="btn" data-ex="partial" type="button">Load weak example</button>
-      <button class="btn" data-ex="clear" type="button">Clear</button>
+      <button class="btn" data-ex="strong" type="button" id="exStrong">Load strong example</button>
+      <button class="btn" data-ex="partial" type="button" id="exWeak">Load weak example</button>
+      <button class="btn" data-ex="clear" type="button" id="btnClear">Clear</button>
     </div>
   </section>
 
   <section class="panel results">
-    <h2>Score <span id="gradeBadge"></span></h2>
-    <div id="out"><p class="dim">Paste a harness (or load an example) to see the five-axis breakdown.</p></div>
+    <h2><span id="scoreHead">Score</span> <span id="gradeBadge"></span></h2>
+    <div id="out"><p class="dim" id="placeholder">Paste a harness (or load an example) to see the five-axis breakdown.</p></div>
   </section>
 </main>
 
+<section class="how generator">
+  <div class="panel">
+    <div class="gen-head">
+      <h2 id="genHead">Generate a hardened prompt</h2>
+      <div class="segmented gen-mode" id="genMode" role="group" aria-label="Generator mode">
+        <label><input type="radio" name="genmode" value="gaps" checked> <span id="modeGaps">Fill the gaps</span></label>
+        <label><input type="radio" name="genmode" value="all"> <span id="modeAll">Full contract</span></label>
+      </div>
+    </div>
+    <p class="dim" id="genSub">Keeps your rough prompt as the intent and appends a deterministic operating contract that covers the missing axes — so the result scores near-100. No model call; runs in your browser.</p>
+    <div class="row">
+      <button class="btn primary" id="btnGen" type="button">Generate</button>
+      <button class="btn" id="btnCopy" type="button" disabled>Copy</button>
+    </div>
+    <textarea id="genOut" rows="14" readonly placeholder="The hardened prompt appears here…"></textarea>
+  </div>
+</section>
+
 <section class="how">
   <details open>
-    <summary>What the five axes mean</summary>
-    <ul>
-      <li><b>Loop</b> — does the harness form a real agent loop? Tool results fed back as observations, iteration, and an explicit exit/termination condition — not a single-shot answer.</li>
-      <li><b>Verification</b> — does the loop close on an objective gate (tests / typecheck / exit code / an independent reviewer) rather than the model's own claim that it is done?</li>
-      <li><b>Tracing</b> — are inputs, outputs, timing, and errors recorded per step, so a failure can be diagnosed after the fact?</li>
-      <li><b>Memory</b> — are short-term working memory, conversation history, and a long-term store distinguished, and is the context budget managed?</li>
-      <li><b>Safety</b> — is untrusted input validated, are tool permissions scoped, and are irreversible actions gated on approval / dry-run / rollback?</li>
-    </ul>
-    <p class="dim">The five axes are adapted from the common "production agent stack" framing (loop · harness · evals · tracing · memory), reframed for what you can statically check in a prompt + tool schema.</p>
+    <summary id="howAxesSummary">What the five axes mean</summary>
+    <div id="howAxesBody"></div>
   </details>
   <details>
-    <summary>How the score works (and its limits)</summary>
-    <ul>
-      <li>Each axis has weighted <b>signals</b> (regex phrase patterns + structural checks on the tool JSON). A signal counts if its phrasing appears in your prompt/tools <em>or</em> its structural check passes.</li>
-      <li>Axis score = <code>min(20, sum of matched signal weights)</code>. Total = sum of the five axes = <code>0–100</code>, mapped to a letter grade.</li>
-      <li>The rule set lives in <code>data/rules.json</code>; an independent Python re-implementation (<code>audit/reference_audit.py</code>) re-derives every score and must reach byte-parity with the shipped JS in CI.</li>
-      <li><b>Limits:</b> this is a <em>lint</em>, not a proof. It reads phrasing and structure, so it can miss an idea expressed in unusual words, or credit a phrase that isn't truly wired. Treat a low score as "make these concerns explicit," and a high score as "you described them" — not as a runtime guarantee.</li>
-    </ul>
+    <summary id="howScoreSummary">How the score works (and its limits)</summary>
+    <div id="howScoreBody"></div>
   </details>
 </section>
 
 <footer>
-  <p>100% client-side · <a href="https://github.com/sylvanus4/harness-quality-checker">GitHub</a> · MIT · a vendor-neutral self-diagnostic. Scores are heuristic estimates, not a guarantee.</p>
+  <p id="footer">100% client-side · <a href="https://github.com/sylvanus4/harness-quality-checker">GitHub</a> · MIT · a vendor-neutral self-diagnostic. Scores are heuristic estimates, not a guarantee.</p>
 </footer>
 
 <script src="assets/compute.js"></script>
