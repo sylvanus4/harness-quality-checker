@@ -85,5 +85,27 @@ ok("generator deterministic", harden(weak.prompt, "", rules, { mode: "all", lang
 
 function HarnessCheckReanalyze(promptStr, toolStr) { return analyze(promptStr, toolStr, rules).total; }
 
+// 9. Source loaders (pure): URL normalization, checkable gate, markdown extraction
+const { normalizeSourceUrl, isCheckable, extractHarness } = require("../assets/compute.js");
+ok("blob URL -> raw URL", normalizeSourceUrl("https://github.com/o/r/blob/main/skills/x/SKILL.md").rawUrl === "https://raw.githubusercontent.com/o/r/main/skills/x/SKILL.md");
+ok("raw URL passes through", normalizeSourceUrl("https://raw.githubusercontent.com/o/r/main/SKILL.md").rawUrl === "https://raw.githubusercontent.com/o/r/main/SKILL.md");
+ok("repo root URL -> error", !!normalizeSourceUrl("https://github.com/o/r").error);
+ok("tree URL -> error", !!normalizeSourceUrl("https://github.com/o/r/tree/main/skills").error);
+ok("non-file URL -> error", !!normalizeSourceUrl("https://example.com/page").error);
+ok("gist -> error", !!normalizeSourceUrl("https://gist.github.com/o/abc").error);
+
+ok("HTML content not checkable", isCheckable("<!DOCTYPE html><html><head></head></html>").ok === false);
+ok("short content not checkable", isCheckable("hi").ok === false);
+ok("real markdown checkable", isCheckable("---\nname: x\n---\nYou are an agent that iterates until the tests pass and logs each step.").ok === true);
+
+const md = "---\nname: my-agent\ndescription: does things\n---\nYou are an agent. Iterate step by step. Stop when the tests pass.\n\n```json\n[{\"name\":\"run\",\"description\":\"run it\",\"input_schema\":{\"type\":\"object\",\"properties\":{}}}]\n```\n";
+const ex = extractHarness(md);
+ok("extract: frontmatter name", ex.meta.name === "my-agent");
+ok("extract: prompt keeps body", ex.prompt.indexOf("Iterate step by step") !== -1);
+ok("extract: tool schema pulled from fenced block", ex.meta.toolFound && /run_it|run/.test(ex.tools) && JSON.parse(ex.tools)[0].name === "run");
+ok("extract: analyze on extracted runs", analyze(ex.prompt, ex.tools, rules).total > 0);
+const plain = extractHarness("You are a plain assistant with no tools.");
+ok("extract: plain prompt -> no tools, no crash", plain.meta.toolFound === false && plain.tools === "");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

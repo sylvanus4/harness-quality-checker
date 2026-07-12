@@ -174,7 +174,66 @@
     return lines.join("\n");
   }
 
-  const api = { analyze: analyze, toolFacts: toolFacts, harden: harden };
+  // ── Source loading helpers (pure) ─────────────────────────────────────
+  // Normalize a pasted URL to a fetchable raw URL. github.com blob pages aren't
+  // CORS-fetchable and return HTML; raw.githubusercontent.com is CORS-open.
+  function normalizeSourceUrl(url) {
+    const u = (url || "").trim();
+    if (!u) return { error: "empty" };
+    let m = u.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/);
+    if (m) return { rawUrl: "https://raw.githubusercontent.com/" + m[1] + "/" + m[2] + "/" + m[3].replace(/[?#].*$/, ""), kind: "github-raw" };
+    if (/^https?:\/\/raw\.githubusercontent\.com\//.test(u)) return { rawUrl: u.replace(/[?#].*$/, ""), kind: "github-raw" };
+    if (/^https?:\/\/gist\.github\.com\//.test(u)) return { error: "Gists aren't supported — use a raw file URL." };
+    if (/^https?:\/\/github\.com\/[^/]+\/[^/]+\/(tree\/|$|\?|#)/.test(u) || /^https?:\/\/github\.com\/[^/]+\/[^/]+\/?$/.test(u))
+      return { error: "Point to a specific SKILL.md / agent file, not a repo or folder." };
+    if (/^https?:\/\/.+\.(md|markdown|mdx|txt|json)(\?.*)?$/i.test(u)) return { rawUrl: u.replace(/[?#].*$/, ""), kind: "raw" };
+    return { error: "Not a URL to a markdown/text/JSON file." };
+  }
+
+  // Gate BEFORE scoring: is this fetched/loaded text actually a checkable file?
+  function isCheckable(text) {
+    const t = (typeof text === "string" ? text : "");
+    if (t.trim().length < 40) return { ok: false, reason: "File is empty or too short to be a skill/agent definition." };
+    if (/^﻿?\s*<(!doctype|html|head|body)\b/i.test(t) || /<\/html>/i.test(t.slice(0, 4000)))
+      return { ok: false, reason: "This looks like an HTML page, not a raw skill file — use the raw file URL (raw.githubusercontent.com)." };
+    if (t.indexOf("\u0000") !== -1) return { ok: false, reason: "This looks like a binary file, not text." };
+    return { ok: true };
+  }
+
+  function looksLikeToolSchema(v) {
+    if (Array.isArray(v)) return v.some(function (x) { return x && (x.name || (x.type === "function" && x.function)); });
+    if (v && typeof v === "object") {
+      if (Array.isArray(v.tools) || Array.isArray(v.functions)) return true;
+      if (v.name && (v.input_schema || v.parameters || v.inputSchema)) return true;
+    }
+    return false;
+  }
+
+  // Extract {prompt, tools} from a SKILL.md / agent .md / plain prompt. The whole
+  // text becomes the prompt (frontmatter included — its description carries intent);
+  // a fenced code block that parses as a tool schema becomes the tool input.
+  function extractHarness(text) {
+    const t = norm(typeof text === "string" ? text : "");
+    const fm = t.match(/^﻿?---\s*\n([\s\S]*?)\n---\s*(\n|$)/);
+    let name = "", hasFrontmatter = false;
+    if (fm) {
+      hasFrontmatter = true;
+      const nm = fm[1].match(/^name:\s*(.+?)\s*$/m);
+      if (nm) name = nm[1].replace(/^["']|["']$/g, "");
+    }
+    let tools = "";
+    const re = /```[a-zA-Z0-9]*\s*\n([\s\S]*?)```/g;
+    let block;
+    while ((block = re.exec(t)) !== null) {
+      const body = block[1].trim();
+      if (!body || (body[0] !== "[" && body[0] !== "{")) continue;
+      try { if (looksLikeToolSchema(JSON.parse(body))) { tools = body; break; } } catch (e) { /* not JSON */ }
+    }
+    return { prompt: t, tools: tools, meta: { name: name, hasFrontmatter: hasFrontmatter, toolFound: tools !== "" } };
+  }
+
+  const api = { analyze: analyze, toolFacts: toolFacts, harden: harden,
+    normalizeSourceUrl: normalizeSourceUrl, isCheckable: isCheckable, extractHarness: extractHarness };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.HarnessCheck = api;
   // eslint note: `api` intentionally exposes analyze/harden/toolFacts only.
