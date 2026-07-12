@@ -13,7 +13,7 @@
   const promptEl = $("prompt"), toolsEl = $("tools"), out = $("out"), badge = $("gradeBadge"), genOut = $("genOut");
   const srcUrl = $("srcUrl"), skillSelect = $("skillSelect"), dropZone = $("dropZone"), fileInput = $("fileInput"),
     loadStatus = $("loadStatus"), disclaimer = $("disclaimer");
-  let rules = null, examples = null, skills = null, lang = "en";
+  let rules = null, examples = null, skills = null, lang = "ko";
   const mode = () => (document.querySelector('input[name="genmode"]:checked') || {}).value || "gaps";
 
   const I18N = {
